@@ -1397,18 +1397,32 @@ function parseXlsToData(wb){
   const justCol=col('justificativa','obs','observacao','observacao','nota','observacao/justificativa');
   const obrigCol=col('obrigatorio','obrig');
   if(statusCol<0) throw new Error('Coluna STATUS não encontrada. Colunas na planilha: '+rows[0].filter(Boolean).join(', '));
+  const updatedFiliais=activeDados.filiais.map(f=>({...f}));
   const filialBySigla={};
-  activeDados.filiais.forEach(f=>filialBySigla[f.sigla.toUpperCase()]=f);
+  updatedFiliais.forEach(f=>filialBySigla[f.sigla.toUpperCase()]=f);
   const catByKey={};
   activeDados.catalogo.forEach(c=>{catByKey[c.nome.toUpperCase()]=c;catByKey[c.key.toUpperCase()]=c;});
   const updatedReg=activeDados.registros.map(r=>({...r}));
   const regById={};updatedReg.forEach(r=>regById[r.id]=r);
   const regByFD={};
   updatedReg.forEach(r=>{
-    const fb=activeDados.filiais.find(fl=>fl.id===r.filialId)||{};
+    const fb=updatedFiliais.find(fl=>fl.id===r.filialId)||{};
     const fk=(fb.sigla||'').toUpperCase();
     regByFD[fk+'|'+r.docNome.toUpperCase()]=r;
     if(r.docKey) regByFD[fk+'|'+r.docKey.toUpperCase()]=r;
+  });
+  // Auto-create minimal filial entries for siglas found in XLS but not in system
+  if(filialCol>=0) rows.slice(1).forEach(row=>{
+    if(!row.some(v=>v!=='')) return;
+    const rawF=String(row[filialCol]||'').trim();
+    const sigla=stripNum(rawF).toUpperCase();
+    if(!sigla||filialBySigla[sigla]) return;
+    const m=rawF.match(/^(\d+)/);
+    const autoId=m?parseInt(m[1]):Math.max(...updatedFiliais.map(f=>f.id),0)+1;
+    if(updatedFiliais.some(f=>f.id===autoId)) return;
+    const nf={id:autoId,sigla,nome:sigla,estado:'',regional:'',auditor:'',supervisor:'',coordenador:'',regiao:'',email_supervisor:''};
+    updatedFiliais.push(nf);
+    filialBySigla[sigla]=nf;
   });
   let updated=0,added=0;
   rows.slice(1).forEach(row=>{
@@ -1461,7 +1475,8 @@ function parseXlsToData(wb){
     }
   });
   if(updated===0&&added===0) throw new Error('Nenhum registro correspondido. Verifique as colunas: '+rows[0].filter(Boolean).join(', '));
-  return {...activeDados,geradoEm:new Date().toISOString().split('T')[0],registros:updatedReg,_xlsImport:{updated,added}};
+  const addedFilials=updatedFiliais.length-activeDados.filiais.length;
+  return {...activeDados,geradoEm:new Date().toISOString().split('T')[0],registros:updatedReg,filiais:updatedFiliais,_xlsImport:{updated,added,addedFilials}};
 }
 function processImportFile(file){
   const isXls=/\.xlsx?$/i.test(file.name);
@@ -1477,7 +1492,7 @@ function processImportFile(file){
         const wb=XLSX.read(e.target.result,{type:'array',cellDates:false});
         const data=parseXlsToData(wb);
         pendingImport=data;
-        statusEl.innerHTML=`<div style="color:var(--green);font-size:12px;padding:6px 10px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius)">✅ Planilha lida: <strong>${data._xlsImport.updated}</strong> registros atualizados${data._xlsImport.added?`, ${data._xlsImport.added} novos`:''}</div>`;
+        statusEl.innerHTML=`<div style="color:var(--green);font-size:12px;padding:6px 10px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius)">✅ Planilha lida: <strong>${data._xlsImport.updated}</strong> registros atualizados${data._xlsImport.added?`, ${data._xlsImport.added} novos`:''}${data._xlsImport.addedFilials?` · <strong>${data._xlsImport.addedFilials}</strong> filial(is) nova(s) detectada(s)`:''}</div>`;
         showImportDiff(data);
       }catch(err){
         statusEl.innerHTML=`<div style="color:var(--red);padding:10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius)">${esc(err.message)}</div>`;
