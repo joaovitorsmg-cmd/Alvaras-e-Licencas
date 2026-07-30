@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Alvarás &amp; Licenças · Painel de Controle</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 /* ─── RESET / BASE ─────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -158,6 +159,33 @@ tbody tr:hover{background:var(--surface2)}
 .badge-vencido{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
 .badge-rejeitado{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
 .badge-nao_iniciado{background:var(--surface2);color:var(--text3);border:1px solid var(--border)}
+.renov-badge{display:inline-flex;align-items:center;gap:2px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border);white-space:nowrap;margin-left:4px}
+.semdoc-badge{display:inline-flex;align-items:center;gap:2px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-border);white-space:nowrap;margin-left:4px}
+/* ── Regional Summary ── */
+.regiao-summary{display:flex;gap:10px;margin-bottom:12px}
+.regiao-card{flex:1;min-width:200px;padding:14px 16px;border-radius:var(--radius-lg);border:2px solid var(--border);background:var(--surface);cursor:pointer;transition:var(--transition);box-shadow:var(--shadow)}
+.regiao-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.regiao-card.norte.active{border-color:var(--amber);background:var(--amber-bg)}
+.regiao-card.sul.active{border-color:var(--accent);background:var(--accent-bg)}
+.regiao-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.regiao-hdr-title{font-size:13px;font-weight:700}
+.regiao-hdr-total{font-size:22px;font-weight:800}
+.regiao-stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.rs-chip{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:3px 8px;border-radius:20px}
+.rs-chip.red{background:var(--red-bg);color:var(--red)}
+.rs-chip.orange{background:var(--orange-bg);color:var(--orange)}
+.rs-chip.amber{background:var(--amber-bg);color:var(--amber)}
+.rs-chip.green{background:var(--green-bg);color:var(--green)}
+.regiao-bar-wrap{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-top:6px}
+.regiao-bar-fill{height:100%;border-radius:4px;transition:.5s ease}
+.regiao-pct{font-size:11px;color:var(--text3);margin-top:4px;text-align:right}
+/* ── Region Pills ── */
+.regiao-pills{display:flex;gap:5px;align-items:center;padding-bottom:4px}
+.pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;transition:var(--transition);white-space:nowrap}
+.pill:hover{background:var(--surface2);color:var(--text);border-color:var(--border2)}
+.pill.all.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pill.norte.active{background:var(--amber);color:#fff;border-color:var(--amber)}
+.pill.sul.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .obrig-badge{
   display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;
   padding:2px 6px;border-radius:4px;
@@ -350,9 +378,15 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
 <!-- ══ TAB: VISÃO GERAL ══════════════════════════════════════════════ -->
 <div id="tab-geral" class="tab-panel active">
   <!-- KPI BAR -->
+  <div id="regionalBar"></div>
   <div class="kpi-bar" id="kpiBar"></div>
   <!-- FILTER BAR -->
   <div class="filter-bar">
+    <div class="regiao-pills">
+      <button class="pill all active" id="pillAll" onclick="setRegiao(null)">🌐 Todas</button>
+      <button class="pill norte" id="pillNorte" onclick="setRegiao('NORTE')">🟡 Norte</button>
+      <button class="pill sul" id="pillSul" onclick="setRegiao('SUL')">🔵 Sul</button>
+    </div>
     <div class="filter-group"><label>Filial</label>
       <select id="filterFilial" onchange="renderAll()"><option value="">Todas</option></select></div>
     <div class="filter-group"><label>Regional</label>
@@ -446,22 +480,23 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
 <!-- ══ TAB: IMPORTAR PLANILHA ════════════════════════════════════════ -->
 <div id="tab-importar" class="tab-panel">
   <div class="section-card">
-    <h3>⬆ Importar Nova Planilha JSON</h3>
+    <h3>⬆ Importar Planilha XLS / JSON</h3>
     <p style="color:var(--text2);font-size:13px;margin-bottom:16px">
-      Faça upload de um arquivo JSON no mesmo formato da planilha atual.<br>
-      Um <strong>diff</strong> será exibido antes de confirmar a substituição.
-      Somente a importação pode alterar o <strong>status</strong> dos registros.
+      Faça upload de um arquivo <strong>Excel (.xlsx/.xls)</strong> ou JSON com os registros.<br>
+      Um <strong>diff</strong> será exibido antes de confirmar. Somente a importação pode alterar o <strong>status</strong>.<br>
+      <span style="font-size:11px;opacity:.8">Colunas esperadas: <code>ID</code> ou <code>FILIAL</code>+<code>DOCUMENTO</code>, <code>STATUS</code>, <code>VENCIMENTO</code>, <code>JUSTIFICATIVA</code></span>
     </p>
     <div style="border:2px dashed var(--border);border-radius:var(--radius-lg);padding:40px;text-align:center;cursor:pointer;transition:var(--transition)"
          id="dropZone"
          ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
          ondragleave="this.style.borderColor='var(--border)'"
-         ondrop="handleDrop(event)">
+         ondrop="handleDrop(event)"
+         style="cursor:pointer">
       <div style="font-size:36px;margin-bottom:8px;opacity:.4">📂</div>
       <p style="color:var(--text2);font-size:14px">Arraste o arquivo JSON aqui ou</p>
       <label class="btn btn-primary btn-sm" style="margin-top:10px;cursor:pointer">
         Selecionar arquivo
-        <input type="file" id="importFileInput" accept=".json" onchange="handleFileSelect(event)" style="display:none"/>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls,.json" onchange="handleFileSelect(event)" style="display:none"/>
       </label>
     </div>
     <div id="importStatus" style="margin-top:12px"></div>
@@ -563,6 +598,40 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
   </div>
 </div>
 
+<!-- CONFIG MODAL -->
+<div class="overlay" id="cfgModal" onclick="if(event.target===this)closeCfgModal()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h2>⚙ Configuração do Painel</h2>
+      <button class="btn-icon" onclick="closeCfgModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text2);font-size:12px;margin-bottom:16px;line-height:1.6">
+        Configure a sincronização com <strong>JSONBin.io</strong> para persistência em nuvem.<br>
+        <span style="opacity:.7">Dica: clique 5× no logotipo para abrir esta tela.</span>
+      </p>
+      <div class="form-row">
+        <label>JSONBin BIN ID</label>
+        <input type="text" id="cfgBinId" placeholder="Ex: 64f5a7b8e41b4d3a7d9e1234"
+               style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:13px"/>
+        <span class="hint">ID do bin no jsonbin.io → Bins → clique no bin → copie o ID da URL</span>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <label>Master Key (API Key)</label>
+        <input type="password" id="cfgApiKey" placeholder="$2a$10$…"
+               style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:13px"/>
+        <span class="hint">Chave de acesso da API JSONBin — pré-configurada se gerada pela equipe</span>
+      </div>
+      <div id="cfgTestResult" style="margin-top:10px;font-size:13px;min-height:20px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeCfgModal()">Cancelar</button>
+      <button class="btn btn-secondary" onclick="testCfgConn()">🔗 Testar Conexão</button>
+      <button class="btn btn-primary" onclick="saveCfg()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toastContainer"></div>
 
@@ -641,6 +710,7 @@ const state = {
   filterTipo: '',
   filterObrig: '',
   search: '',
+  regiao: null,
 };
 
 /* ─── INDICES ──────────────────────────────────────────────────────────*/
@@ -696,12 +766,16 @@ function deriveRegistro(r){
     const d=new Date(dataVenc+'T00:00:00');
     diasParaVencer=Math.round((d-today)/(1000*60*60*24));
   }
+  const diasAntes=cat.diasAntes||0;
+  const emJanelaRenovacao=diasParaVencer!==null&&diasParaVencer>=0&&diasAntes>0&&diasParaVencer<=diasAntes&&!['ok','aprovado'].includes(urgencia);
+  const semDocumento=urgencia==='pendente'&&!!dataVenc;
   return {
     id:r.id, filialId:r.filialId, branch, docNome:r.docNome||'',
     catalogKey:r.docKey, cat, status, dataVencimento:dataVenc,
     diasParaVencer, urgencia, justificativa:justif,
     obrigatorio:r.obrigatorio||false,
     updatedBy:ov.updatedBy||null, updatedAt:ov.updatedAt||null,
+    emJanelaRenovacao, semDocumento,
   };
 }
 
@@ -751,6 +825,7 @@ function getFiltered(){
   if(fTipo)     list=list.filter(r=>r.catalogKey===fTipo); // catalogKey derived from docKey
   if(fObrig==='1') list=list.filter(r=>r.obrigatorio);
   if(fObrig==='0') list=list.filter(r=>!r.obrigatorio);
+  if(state.regiao) list=list.filter(r=>(r.branch.regiao||'')===state.regiao);
   if(q) list=list.filter(r=>
     norm(r.branch.sigla).includes(q)||norm(r.branch.nome).includes(q)||
     norm(r.docNome).includes(q)||norm(r.justificativa).includes(q)||
@@ -775,6 +850,52 @@ function urgBadge(u){
   return `<span class="urg ${m.cls}">${m.icon} ${m.label}</span>`;
 }
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+/* ─── REGIONAL SUMMARY ───────────────────────────────────────────────────────*/
+function setRegiao(r){
+  state.regiao=r;
+  document.getElementById('pillAll').classList.toggle('active',!r);
+  document.getElementById('pillNorte').classList.toggle('active',r==='NORTE');
+  document.getElementById('pillSul').classList.toggle('active',r==='SUL');
+  renderAll();
+}
+
+function renderRegionalSummary(allList){
+  const bar=document.getElementById('regionalBar');
+  if(!bar) return;
+  function rstat(reg){
+    const items=allList.filter(r=>(r.branch.regiao||'')===reg);
+    const total=items.length;
+    if(!total) return {total:0,venc:0,crit:0,renov:0,ok:0,pct:0};
+    const venc=items.filter(r=>r.urgencia==='vencido').length;
+    const crit=items.filter(r=>r.urgencia==='critico').length;
+    const renov=items.filter(r=>r.emJanelaRenovacao).length;
+    const ok=items.filter(r=>['ok','aprovado'].includes(r.urgencia)).length;
+    return {total,venc,crit,renov,ok,pct:Math.round(ok/total*100)};
+  }
+  const n=rstat('NORTE'), s=rstat('SUL');
+  function card(reg,st,emoji,cls,barColor){
+    const active=state.regiao===reg?' active':'';
+    return `<div class="regiao-card ${cls}${active}" onclick="setRegiao(state.regiao==='${reg}'?null:'${reg}')">
+      <div class="regiao-hdr">
+        <div class="regiao-hdr-title">${emoji} ${reg === 'NORTE' ? 'NORTE — Região Norte' : 'SUL — Região Sul'}</div>
+        <div class="regiao-hdr-total">${st.total}</div>
+      </div>
+      <div class="regiao-stats">
+        ${st.venc?`<span class="rs-chip red">🔴 ${st.venc} Venc.</span>`:''}
+        ${st.crit?`<span class="rs-chip orange">🟠 ${st.crit} Crít.</span>`:''}
+        ${st.renov?`<span class="rs-chip amber">🔄 ${st.renov} Renovar</span>`:''}
+        <span class="rs-chip green">✅ ${st.ok} OK</span>
+      </div>
+      <div class="regiao-bar-wrap"><div class="regiao-bar-fill" style="width:${st.pct}%;background:${barColor}"></div></div>
+      <div class="regiao-pct">${st.pct}% regularizados</div>
+    </div>`;
+  }
+  bar.innerHTML=`<div class="regiao-summary">
+    ${card('NORTE',n,'🟡','norte','var(--amber)')}
+    ${card('SUL',s,'🔵','sul','var(--accent)')}
+  </div>`;
+}
 
 /* ─── KPI RENDER ────────────────────────────────────────────────────────*/
 function renderKpis(list){
@@ -819,6 +940,8 @@ function renderTable(list){
   }
   tb.innerHTML=list.map(r=>{
     const obrigBadge=r.obrigatorio?`<span class="obrig-badge">⚠ OBRIGATÓRIO</span>`:'';
+    const renovBadge=r.emJanelaRenovacao?`<span class="renov-badge">🔄 RENOVAR</span>`:'';
+    const semDocBadge=r.semDocumento?`<span class="semdoc-badge">📎 SEM DOC</span>`:'';
     const dias=r.diasParaVencer==null?'—':(r.diasParaVencer<0?`<span style="color:var(--red);font-weight:700">${r.diasParaVencer}d</span>`:`${r.diasParaVencer}d`);
     const editedMark=overrides[String(r.id)]?'<span title="Editado manualmente" style="color:var(--accent);font-size:10px;margin-left:3px">●</span>':'';
     return `<tr>
@@ -826,7 +949,7 @@ function renderTable(list){
       <td style="font-size:12px;color:var(--text2)">${esc(r.branch.regional||'—')}</td>
       <td class="td-doc">
         <span title="${esc(r.docNome)}">${esc(r.docNome)}</span>
-        ${obrigBadge}${editedMark}
+        ${obrigBadge}${renovBadge}${semDocBadge}${editedMark}
       </td>
       <td>${urgBadge(r.urgencia)}</td>
       <td style="font-size:12px;white-space:nowrap">${fmtDate(r.dataVencimento)}</td>
@@ -858,6 +981,7 @@ function renderTable(list){
 function renderAll(){
   const allList=activeDados.registros.map(deriveRegistro);
   const filtered=getFiltered();
+  renderRegionalSummary(allList);
   renderKpis(allList);
   renderTable(filtered);
   updateHeaderSub(allList);
@@ -1235,24 +1359,114 @@ function handleFileSelect(e){
   if(file) processImportFile(file);
   e.target.value='';
 }
-function processImportFile(file){
-  if(!file.name.endsWith('.json')){toast('Apenas arquivos .json são aceitos','error');return;}
-  const status=document.getElementById('importStatus');
-  status.innerHTML='<div style="display:flex;align-items:center;gap:8px;color:var(--text2)"><div class="spinner"></div> Lendo arquivo…</div>';
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      const data=JSON.parse(e.target.result);
-      if(!data.registros||!data.filiais){throw new Error('Formato inválido: faltam campos registros ou filiais');}
-      pendingImport=data;
-      status.innerHTML='';
-      showImportDiff(data);
-    } catch(err){
-      status.innerHTML=`<div style="color:var(--red);padding:10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius)">${esc(err.message)}</div>`;
-      toast('Erro ao ler arquivo: '+err.message,'error');
+function parseXlsDate(val){
+  if(!val) return null;
+  const s=String(val).trim();
+  if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){const[d,m,y]=s.split('/');return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+  if(/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) return s.substring(0,10);
+  if(/^\d+$/.test(s)){const n=parseInt(s);if(n>40000&&n<60000){const dd=new Date((n-25569)*86400*1000);return dd.toISOString().split('T')[0];}}
+  const dd=new Date(val);if(!isNaN(dd)) return dd.toISOString().split('T')[0];
+  return null;
+}
+function parseXlsToData(wb){
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+  if(rows.length<2) throw new Error('Planilha vazia');
+  const norm2=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  const hdrs=rows[0].map(norm2);
+  const col=(...names)=>{for(const n of names){const i=hdrs.indexOf(norm2(n));if(i>=0)return i;}return -1;};
+  const idCol=col('id','cod','codigo');
+  const filialCol=col('filial','sigla','unidade');
+  const docCol=col('documento','doc','nome_documento','nome documento','licenca','alvara','tipo','documento/licenca');
+  const statusCol=col('status');
+  const dataCol=col('vencimento','data_vencimento','data vencimento','data','validade','dt_vencimento','data de vencimento');
+  const justCol=col('justificativa','obs','observacao','observacao','nota','observacao/justificativa');
+  const obrigCol=col('obrigatorio','obrig');
+  if(statusCol<0) throw new Error('Coluna STATUS não encontrada. Colunas na planilha: '+rows[0].filter(Boolean).join(', '));
+  const filialBySigla={};
+  activeDados.filiais.forEach(f=>filialBySigla[f.sigla.toUpperCase()]=f);
+  const catByKey={};
+  activeDados.catalogo.forEach(c=>{catByKey[c.nome.toUpperCase()]=c;catByKey[c.key.toUpperCase()]=c;});
+  const updatedReg=activeDados.registros.map(r=>({...r}));
+  const regById={};updatedReg.forEach(r=>regById[r.id]=r);
+  const regByFD={};
+  updatedReg.forEach(r=>{
+    const fb=activeDados.filiais.find(fl=>fl.id===r.filialId)||{};
+    const fk=(fb.sigla||'').toUpperCase();
+    regByFD[fk+'|'+r.docNome.toUpperCase()]=r;
+    if(r.docKey) regByFD[fk+'|'+r.docKey.toUpperCase()]=r;
+  });
+  let updated=0,added=0;
+  rows.slice(1).forEach(row=>{
+    if(!row.some(v=>v!=='')) return;
+    const g=i=>i>=0?String(row[i]||'').trim():'';
+    let reg=null;
+    if(idCol>=0&&g(idCol)) reg=regById[parseInt(g(idCol))];
+    if(!reg&&filialCol>=0&&docCol>=0){
+      const fk=g(filialCol).toUpperCase();const dk=g(docCol).toUpperCase();
+      reg=regByFD[fk+'|'+dk];
+      if(!reg) reg=Object.values(regByFD).find(r=>{
+        const fb=activeDados.filiais.find(fl=>fl.id===r.filialId)||{};
+        return (fb.sigla||'').toUpperCase()===fk && r.docNome.toUpperCase().includes(dk.substring(0,10));
+      });
     }
-  };
-  reader.readAsText(file,'utf-8');
+    const status=g(statusCol);if(!status) return;
+    if(reg){
+      reg.status=status;
+      if(dataCol>=0&&g(dataCol)) reg.dataVencimento=parseXlsDate(g(dataCol));
+      if(justCol>=0&&g(justCol)) reg.justificativa=g(justCol);
+      if(obrigCol>=0&&g(obrigCol)) reg.obrigatorio=['sim','yes','true','1','s'].includes(g(obrigCol).toLowerCase());
+      updated++;
+    } else if(filialCol>=0&&docCol>=0&&g(filialCol)&&g(docCol)){
+      const fs=g(filialCol).toUpperCase();const dn=g(docCol).toUpperCase();
+      const filial=filialBySigla[fs];
+      const cat=catByKey[dn]||Object.values(catByKey).find(c=>c.nome.toUpperCase().includes(dn.substring(0,8)));
+      if(filial&&cat){
+        const newId=Math.max(...updatedReg.map(r=>r.id),0)+1+added;
+        const nr={id:newId,filialId:filial.id,docKey:cat.key,docNome:cat.nome,obrigatorio:cat.obrigatorioGeral||false,status,dataVencimento:dataCol>=0?parseXlsDate(g(dataCol)):null,justificativa:justCol>=0?g(justCol):'',sintetico:false};
+        updatedReg.push(nr);regById[newId]=nr;regByFD[fs+'|'+dn]=nr;added++;
+      }
+    }
+  });
+  if(updated===0&&added===0) throw new Error('Nenhum registro correspondido. Verifique as colunas: '+rows[0].filter(Boolean).join(', '));
+  return {...activeDados,geradoEm:new Date().toISOString().split('T')[0],registros:updatedReg,_xlsImport:{updated,added}};
+}
+function processImportFile(file){
+  const isXls=/\.xlsx?$/i.test(file.name);
+  const isJson=file.name.endsWith('.json');
+  if(!isXls&&!isJson){toast('Formatos aceitos: .xlsx, .xls, .json','error');return;}
+  const statusEl=document.getElementById('importStatus');
+  statusEl.innerHTML='<div style="display:flex;align-items:center;gap:8px;color:var(--text2)"><div class="spinner"></div> Lendo arquivo…</div>';
+  const reader=new FileReader();
+  if(isXls){
+    reader.onload=e=>{
+      try{
+        if(typeof XLSX==='undefined') throw new Error('Biblioteca XLSX não carregada. Requer conexão com internet.');
+        const wb=XLSX.read(e.target.result,{type:'array',cellDates:false});
+        const data=parseXlsToData(wb);
+        pendingImport=data;
+        statusEl.innerHTML=`<div style="color:var(--green);font-size:12px;padding:6px 10px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius)">✅ Planilha lida: <strong>${data._xlsImport.updated}</strong> registros atualizados${data._xlsImport.added?`, ${data._xlsImport.added} novos`:''}</div>`;
+        showImportDiff(data);
+      }catch(err){
+        statusEl.innerHTML=`<div style="color:var(--red);padding:10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius)">${esc(err.message)}</div>`;
+        toast('Erro ao ler planilha: '+err.message,'error');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.onload=e=>{
+      try{
+        const data=JSON.parse(e.target.result);
+        if(!data.registros||!data.filiais){throw new Error('Formato inválido: faltam campos registros ou filiais');}
+        pendingImport=data;statusEl.innerHTML='';
+        showImportDiff(data);
+      }catch(err){
+        statusEl.innerHTML=`<div style="color:var(--red);padding:10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius)">${esc(err.message)}</div>`;
+        toast('Erro ao ler arquivo: '+err.message,'error');
+      }
+    };
+    reader.readAsText(file,'utf-8');
+  }
 }
 
 function showImportDiff(newData){
@@ -1516,11 +1730,66 @@ function toast(msg,type=''){
 
 /* ─── INIT ──────────────────────────────────────────────────────────────────*/
 async function init(){
+  // Restore saved JSONBin config
+  const _sb=safeStorage.get('painelLic_binId','');
+  const _sk=safeStorage.get('painelLic_apiKey','');
+  if(_sb) CONFIG.JSONBIN_BIN_ID=_sb;
+  if(_sk) CONFIG.JSONBIN_API_KEY=_sk;
+  initCfgTrigger();
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+      closeCfgModal();closeEditModal();closeLicHist();closeAudDetail();cancelImport();
+    }
+  });
   rebuildIndices();
   await loadOverrides();
   rebuildIndices(); // rebuild after activeDados might have changed
   populateFilters();
   renderAll();
+}
+
+/* ─── CONFIG MODAL ────────────────────────────────────────────────────────*/
+var cfgClickCount=0,cfgClickTimer=null;
+function initCfgTrigger(){
+  const logo=document.getElementById('logoPlate');
+  if(!logo) return;
+  logo.addEventListener('click',()=>{
+    cfgClickCount++;
+    clearTimeout(cfgClickTimer);
+    cfgClickTimer=setTimeout(()=>{cfgClickCount=0;},2000);
+    if(cfgClickCount>=5){cfgClickCount=0;openCfgModal();}
+  });
+  logo.title='Clique 5× para configurações';
+  logo.style.cursor='pointer';
+}
+function openCfgModal(){
+  document.getElementById('cfgBinId').value=CONFIG.JSONBIN_BIN_ID||safeStorage.get('painelLic_binId','')||'';
+  document.getElementById('cfgApiKey').value=CONFIG.JSONBIN_API_KEY||'';
+  document.getElementById('cfgTestResult').innerHTML='';
+  document.getElementById('cfgModal').classList.add('open');
+}
+function closeCfgModal(){document.getElementById('cfgModal').classList.remove('open');}
+async function testCfgConn(){
+  const binId=document.getElementById('cfgBinId').value.trim();
+  const apiKey=document.getElementById('cfgApiKey').value.trim();
+  const res=document.getElementById('cfgTestResult');
+  if(!binId||!apiKey){res.innerHTML='<span style="color:var(--amber)">⚠ Preencha BIN ID e Master Key para testar</span>';return;}
+  res.innerHTML='<span style="color:var(--text2)">🔄 Testando conexão…</span>';
+  try{
+    const r=await fetch(CONFIG.JSONBIN_BASE+binId+'/latest',{headers:{'X-Master-Key':apiKey,'X-Bin-Meta':'false'}});
+    res.innerHTML=r.ok?'<span style="color:var(--green)">✅ Conexão OK!</span>':`<span style="color:var(--red)">❌ Erro ${r.status}: ${r.statusText}</span>`;
+  }catch(e){res.innerHTML=`<span style="color:var(--red)">❌ ${e.message}</span>`;}
+}
+function saveCfg(){
+  const binId=document.getElementById('cfgBinId').value.trim();
+  const apiKey=document.getElementById('cfgApiKey').value.trim();
+  if(binId) CONFIG.JSONBIN_BIN_ID=binId;
+  if(apiKey) CONFIG.JSONBIN_API_KEY=apiKey;
+  safeStorage.set('painelLic_binId',binId);
+  if(apiKey) safeStorage.set('painelLic_apiKey',apiKey);
+  closeCfgModal();
+  toast('Configuração salva','success');
+  if(binId) loadOverrides();
 }
 
 document.addEventListener('DOMContentLoaded', init);
