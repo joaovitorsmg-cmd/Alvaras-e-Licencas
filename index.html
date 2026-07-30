@@ -622,15 +622,15 @@ const KPI_LIST=[
 const STATUS_OPTIONS=['Aprovado','Aberto/Pendente','Aguardando Aprovação','Vencido','Rejeitado','Sem Protocolo'];
 
 /* ─── STATE ────────────────────────────────────────────────────────────*/
-let activeDados = DADOS;
-let overrides = {};
-let auditLog = [];
-let pendingImport = null;
-let currentLicHistRegId = null;
-let currentAudDetailName = null;
-let currentUserIp = 'N/D';
-let syncTimer = null;
-let syncState = 'idle'; // idle | syncing | synced | error
+var activeDados = DADOS;
+var overrides = {};
+var auditLog = [];
+var pendingImport = null;
+var currentLicHistRegId = null;
+var currentAudDetailName = null;
+var currentUserIp = 'N/D';
+var syncTimer = null;
+var syncState = 'idle';
 
 const state = {
   sort: {col:'urgencia', dir:'desc'},
@@ -683,12 +683,12 @@ function computeUrgencia(status, dataVenc){
 }
 
 function deriveRegistro(r){
-  const ov=overrides[r.id]||{};
+  const ov=overrides[String(r.id)]||{};
   const status   = ov.status    != null ? ov.status    : (r.status||'Sem Protocolo');
   const dataVenc = ov.dataVencimento !== undefined ? ov.dataVencimento : r.dataVencimento;
   const justif   = ov.justificativa != null ? ov.justificativa : (r.justificativa||'');
   const branch   = branchesById[r.filialId]||{sigla:'?',nome:'?',regional:'',auditor:''};
-  const cat      = catalogByKey[r.catalogKey]||{};
+  const cat      = catalogByKey[r.docKey]||{};
   const urgencia = computeUrgencia(status, dataVenc);
   const today=new Date(); today.setHours(0,0,0,0);
   let diasParaVencer=null;
@@ -698,7 +698,7 @@ function deriveRegistro(r){
   }
   return {
     id:r.id, filialId:r.filialId, branch, docNome:r.docNome||'',
-    catalogKey:r.catalogKey, cat, status, dataVencimento:dataVenc,
+    catalogKey:r.docKey, cat, status, dataVencimento:dataVenc,
     diasParaVencer, urgencia, justificativa:justif,
     obrigatorio:r.obrigatorio||false,
     updatedBy:ov.updatedBy||null, updatedAt:ov.updatedAt||null,
@@ -748,7 +748,7 @@ function getFiltered(){
   if(fFilial)   list=list.filter(r=>r.filialId==fFilial);
   if(fRegional) list=list.filter(r=>norm(r.branch.regional)===norm(fRegional));
   if(fAuditor)  list=list.filter(r=>norm(r.branch.auditor)===norm(fAuditor));
-  if(fTipo)     list=list.filter(r=>r.catalogKey===fTipo);
+  if(fTipo)     list=list.filter(r=>r.catalogKey===fTipo); // catalogKey derived from docKey
   if(fObrig==='1') list=list.filter(r=>r.obrigatorio);
   if(fObrig==='0') list=list.filter(r=>!r.obrigatorio);
   if(q) list=list.filter(r=>
@@ -820,7 +820,7 @@ function renderTable(list){
   tb.innerHTML=list.map(r=>{
     const obrigBadge=r.obrigatorio?`<span class="obrig-badge">⚠ OBRIGATÓRIO</span>`:'';
     const dias=r.diasParaVencer==null?'—':(r.diasParaVencer<0?`<span style="color:var(--red);font-weight:700">${r.diasParaVencer}d</span>`:`${r.diasParaVencer}d`);
-    const editedMark=overrides[r.id]?'<span title="Editado manualmente" style="color:var(--accent);font-size:10px;margin-left:3px">●</span>':'';
+    const editedMark=overrides[String(r.id)]?'<span title="Editado manualmente" style="color:var(--accent);font-size:10px;margin-left:3px">●</span>':'';
     return `<tr>
       <td class="td-filial">${esc(r.branch.sigla)}<br><span style="font-size:10px;color:var(--text3);font-weight:400">${esc(r.branch.nome)}</span></td>
       <td style="font-size:12px;color:var(--text2)">${esc(r.branch.regional||'—')}</td>
@@ -876,7 +876,7 @@ function populateFilters(){
   const filiais=[...new Set(activeDados.filiais.map(b=>b))].sort((a,b)=>a.sigla.localeCompare(b.sigla,'pt-BR'));
   const regionais=[...new Set(activeDados.filiais.map(b=>b.regional||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   const auditores=[...new Set(activeDados.filiais.map(b=>b.auditor||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const tipos=[...new Set(activeDados.registros.map(r=>r.catalogKey))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const tipos=[...new Set(activeDados.registros.map(r=>r.docKey))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
   function fillSel(id, opts, labelFn, valFn){
     const el=document.getElementById(id); if(!el) return;
@@ -944,10 +944,10 @@ function switchTab(tabId, btn){
 }
 
 /* ─── EDIT MODAL ─────────────────────────────────────────────────────────*/
-let editingRegId = null;
+var editingRegId = null;
 
 function openEditModal(regId){
-  const r=activeDados.registros.find(x=>x.id===regId);
+  const r=activeDados.registros.find(x=>String(x.id)===String(regId));
   if(!r){toast('Registro não encontrado','error');return;}
   const d=deriveRegistro(r);
   editingRegId=regId;
@@ -982,13 +982,13 @@ function saveEdit(){
   const nome=document.getElementById('popNome').value.trim();
   if(nome) safeStorage.set('painelLic_userName', nome);
 
-  const base=activeDados.registros.find(r=>r.id===regId);
-  const prev=overrides[regId]||{};
+  const base=activeDados.registros.find(r=>String(r.id)===String(regId));
+  const prev=overrides[String(regId)]||{};
   const prevJust=prev.justificativa!=null?prev.justificativa:(base.justificativa||'');
   const prevData=prev.dataVencimento!==undefined?prev.dataVencimento:base.dataVencimento;
   const currentStatus=prev.status!=null?prev.status:(base.status||'Sem Protocolo');
 
-  overrides[regId]={...prev, dataVencimento, justificativa, updatedBy:nome||null, updatedAt:new Date().toISOString()};
+  overrides[String(regId)]={...prev, dataVencimento, justificativa, updatedBy:nome||null, updatedAt:new Date().toISOString()};
 
   appendAuditEntry({
     userName: nome||'Anônimo',
@@ -1078,13 +1078,13 @@ function renderTlEntry(e){
 
 /* ─── LICENSE HISTORY ────────────────────────────────────────────────────*/
 function openLicHist(regId){
-  const base=activeDados.registros.find(r=>r.id===regId);
+  const base=activeDados.registros.find(r=>String(r.id)===String(regId));
   if(!base){toast('Registro não encontrado','error');return;}
   const d=deriveRegistro(base);
   currentLicHistRegId=regId;
   document.getElementById('licHistTitle').textContent=`📜 ${d.branch.sigla} — ${d.docNome}`;
   const body=document.getElementById('licHistBody');
-  const entries=auditLog.filter(e=>e.regId===regId).reverse();
+  const entries=auditLog.filter(e=>String(e.regId)===String(regId)).reverse();
 
   // Current state card
   body.innerHTML=`
@@ -1108,8 +1108,8 @@ function closeLicHist(){
 }
 function exportLicCsv(){
   if(!currentLicHistRegId) return;
-  const entries=auditLog.filter(e=>e.regId===currentLicHistRegId);
-  const base=activeDados.registros.find(r=>r.id===currentLicHistRegId);
+  const entries=auditLog.filter(e=>String(e.regId)===String(currentLicHistRegId));
+  const base=activeDados.registros.find(r=>String(r.id)===String(currentLicHistRegId));
   downloadCsv(`historico_${base?.docNome||currentLicHistRegId}.csv`, auditToCsvRows(entries));
 }
 
@@ -1332,10 +1332,10 @@ function confirmImport(){
   activeDados.registros.forEach(nr=>{
     const or=prevById[nr.id];
     if(or && or.status!==nr.status){
-      const ov=overrides[nr.id]||{};
+      const ov=overrides[String(nr.id)]||{};
       const prevStatus=ov.status!=null?ov.status:(or.status||'Sem Protocolo');
       // Clear status override since spreadsheet now sets it
-      if(ov.status!=null){ const {status:_,...rest}=ov; overrides[nr.id]=rest; }
+      if(ov.status!=null){ const {status:_,...rest}=ov; overrides[String(nr.id)]=rest; }
       appendAuditEntry({
         userName:safeStorage.get('painelLic_userName','')||'Importação',
         filialId:nr.filialId,
@@ -1524,6 +1524,9 @@ async function init(){
 }
 
 document.addEventListener('DOMContentLoaded', init);
+// Expose constants for debugging / testing
+window.URGENCY_META = URGENCY_META;
+window.KPI_LIST = KPI_LIST;
 </script>
 </body>
 </html>
