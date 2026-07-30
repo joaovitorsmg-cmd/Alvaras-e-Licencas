@@ -1385,6 +1385,8 @@ function parseXlsToData(wb){
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
   if(rows.length<2) throw new Error('Planilha vazia');
   const norm2=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  // Strip leading "N - " prefix (e.g. "1 - MTZ" → "MTZ", "14 - ALVARA SANITÁRIO" → "ALVARA SANITÁRIO")
+  const stripNum=s=>String(s||'').replace(/^\d+\s*[-–—]\s*/,'').trim();
   const hdrs=rows[0].map(norm2);
   const col=(...names)=>{for(const n of names){const i=hdrs.indexOf(norm2(n));if(i>=0)return i;}return -1;};
   const idCol=col('id','cod','codigo');
@@ -1415,12 +1417,24 @@ function parseXlsToData(wb){
     let reg=null;
     if(idCol>=0&&g(idCol)) reg=regById[parseInt(g(idCol))];
     if(!reg&&filialCol>=0&&docCol>=0){
-      const fk=g(filialCol).toUpperCase();const dk=g(docCol).toUpperCase();
+      const fk=stripNum(g(filialCol)).toUpperCase();const dk=stripNum(g(docCol)).toUpperCase();
       reg=regByFD[fk+'|'+dk];
-      if(!reg) reg=Object.values(regByFD).find(r=>{
-        const fb=activeDados.filiais.find(fl=>fl.id===r.filialId)||{};
-        return (fb.sigla||'').toUpperCase()===fk && r.docNome.toUpperCase().includes(dk.substring(0,10));
-      });
+      if(!reg){
+        const dkN=norm2(dk);const dkW=dkN.split(/\s+/).filter(w=>w.length>=5);
+        const seen=new Set();let best=0,bestR=null;
+        Object.values(regByFD).forEach(r=>{
+          if(seen.has(r.id)) return; seen.add(r.id);
+          const fb=activeDados.filiais.find(fl=>fl.id===r.filialId)||{};
+          if((fb.sigla||'').toUpperCase()!==fk) return;
+          const rN=norm2(r.docNome);
+          if(rN.includes(dkN.substring(0,8))){best=99;bestR=r;return;}
+          if(dkW.length>=2){
+            const sc=dkW.filter(w=>rN.split(/\s+/).some(rw=>rw.includes(w.substring(0,6)))).length;
+            if(sc>best&&sc>=2){best=sc;bestR=r;}
+          }
+        });
+        reg=bestR;
+      }
     }
     const status=g(statusCol);if(!status) return;
     if(reg){
@@ -1430,9 +1444,15 @@ function parseXlsToData(wb){
       if(obrigCol>=0&&g(obrigCol)) reg.obrigatorio=['sim','yes','true','1','s'].includes(g(obrigCol).toLowerCase());
       updated++;
     } else if(filialCol>=0&&docCol>=0&&g(filialCol)&&g(docCol)){
-      const fs=g(filialCol).toUpperCase();const dn=g(docCol).toUpperCase();
+      const fs=stripNum(g(filialCol)).toUpperCase();const dn=stripNum(g(docCol)).toUpperCase();
       const filial=filialBySigla[fs];
-      const cat=catByKey[dn]||Object.values(catByKey).find(c=>c.nome.toUpperCase().includes(dn.substring(0,8)));
+      const dnW=norm2(dn).split(/\s+/).filter(w=>w.length>=5);
+      const cat=catByKey[dn]
+        ||Object.values(catByKey).find(c=>norm2(c.nome).includes(norm2(dn).substring(0,8)))
+        ||(dnW.length>=2?Object.values(catByKey).find(c=>{
+            const cW=norm2(c.nome).split(/\s+/);
+            return dnW.filter(w=>cW.some(cw=>cw.includes(w.substring(0,6)))).length>=2;
+          }):null);
       if(filial&&cat){
         const newId=Math.max(...updatedReg.map(r=>r.id),0)+1+added;
         const nr={id:newId,filialId:filial.id,docKey:cat.key,docNome:cat.nome,obrigatorio:cat.obrigatorioGeral||false,status,dataVencimento:dataCol>=0?parseXlsDate(g(dataCol)):null,justificativa:justCol>=0?g(justCol):'',sintetico:false};
