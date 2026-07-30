@@ -1737,11 +1737,14 @@ function toast(msg,type=''){
 
 /* ─── INIT ──────────────────────────────────────────────────────────────────*/
 async function init(){
-  // Restore saved JSONBin config
+  // localStorage only fills in when the hardcoded CONFIG value is empty
   const _sb=safeStorage.get('painelLic_binId','');
   const _sk=safeStorage.get('painelLic_apiKey','');
-  if(_sb) CONFIG.JSONBIN_BIN_ID=_sb;
-  if(_sk) CONFIG.JSONBIN_API_KEY=_sk;
+  if(!CONFIG.JSONBIN_BIN_ID && _sb) CONFIG.JSONBIN_BIN_ID=_sb;
+  if(!CONFIG.JSONBIN_API_KEY && _sk) CONFIG.JSONBIN_API_KEY=_sk;
+  // Sync localStorage to match current hardcoded values so config panel shows them
+  if(CONFIG.JSONBIN_BIN_ID) safeStorage.set('painelLic_binId', CONFIG.JSONBIN_BIN_ID);
+  if(CONFIG.JSONBIN_API_KEY) safeStorage.set('painelLic_apiKey', CONFIG.JSONBIN_API_KEY);
   initCfgTrigger();
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'){
