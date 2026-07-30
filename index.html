@@ -411,7 +411,11 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
     <table id="mainTable">
       <thead>
         <tr>
-          <th data-col="filial" onclick="setSort('filial')">Filial <span class="sort-ico" id="sico-filial"></span></th>
+          <th data-col="filial" data-col2="filialId">
+            <span onclick="setSort('filialId')" style="cursor:pointer;white-space:nowrap">N° <span class="sort-ico" id="sico-filialId"></span></span>
+            <span style="color:var(--border);margin:0 3px">·</span>
+            <span onclick="setSort('filial')" style="cursor:pointer;white-space:nowrap">Filial <span class="sort-ico" id="sico-filial"></span></span>
+          </th>
           <th data-col="regional" onclick="setSort('regional')">Regional <span class="sort-ico" id="sico-regional"></span></th>
           <th data-col="docNome" onclick="setSort('docNome')">Documento <span class="sort-ico" id="sico-docNome"></span></th>
           <th data-col="urgencia" onclick="setSort('urgencia')">Status <span class="sort-ico" id="sico-urgencia"></span></th>
@@ -795,6 +799,7 @@ function sortDerived(list){
   const arr=[...list];
   arr.sort((a,b)=>{
     switch(col){
+      case 'filialId':        return mul*(a.filialId - b.filialId);
       case 'filial':         return mul*a.branch.sigla.localeCompare(b.branch.sigla,'pt-BR',{sensitivity:'base'});
       case 'docNome':        return mul*a.docNome.localeCompare(b.docNome,'pt-BR',{sensitivity:'base'});
       case 'urgencia':       return mul*(URGENCY_META[b.urgencia].order - URGENCY_META[a.urgencia].order);
@@ -945,7 +950,7 @@ function renderTable(list){
     const dias=r.diasParaVencer==null?'—':(r.diasParaVencer<0?`<span style="color:var(--red);font-weight:700">${r.diasParaVencer}d</span>`:`${r.diasParaVencer}d`);
     const editedMark=overrides[String(r.id)]?'<span title="Editado manualmente" style="color:var(--accent);font-size:10px;margin-left:3px">●</span>':'';
     return `<tr>
-      <td class="td-filial">${esc(r.branch.sigla)}<br><span style="font-size:10px;color:var(--text3);font-weight:400">${esc(r.branch.nome)}</span></td>
+      <td class="td-filial"><span style="font-size:10px;color:var(--text3);font-family:var(--mono);font-weight:400">#${r.branch.id}</span> ${esc(r.branch.sigla)}<br><span style="font-size:10px;color:var(--text3);font-weight:400">${esc(r.branch.nome)}</span></td>
       <td style="font-size:12px;color:var(--text2)">${esc(r.branch.regional||'—')}</td>
       <td class="td-doc">
         <span title="${esc(r.docNome)}">${esc(r.docNome)}</span>
@@ -969,7 +974,7 @@ function renderTable(list){
     el.textContent=state.sort.col===col?(state.sort.dir==='asc'?'↑':'↓'):'↕';
   });
   document.querySelectorAll('th[data-col]').forEach(th=>{
-    const sorted=th.dataset.col===state.sort.col;
+    const sorted=th.dataset.col===state.sort.col||th.dataset.col2===state.sort.col;
     th.classList.toggle('sorted',sorted);
   });
 
