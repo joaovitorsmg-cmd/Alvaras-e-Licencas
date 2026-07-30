@@ -1179,9 +1179,15 @@ function renderTlEntry(e){
   const dotCls={edit:'tl-dot-edit',import:'tl-dot-import',status_change:'tl-dot-status'}[e.action]||'';
   let diffHtml='';
   if(e.prevStatus!==e.newStatus)
-    diffHtml+=`<span class="tl-diff-from">${esc(e.prevStatus||'—')}</span><span class="tl-diff-arrow">→</span><span class="tl-diff-to">${esc(e.newStatus||'—')}</span>`;
+    diffHtml+=`<span style="color:var(--text3);font-size:11px">Status:</span> <span class="tl-diff-from">${esc(e.prevStatus||'—')}</span><span class="tl-diff-arrow">→</span><span class="tl-diff-to">${esc(e.newStatus||'—')}</span>`;
   if(e.prevData!==e.newData)
-    diffHtml+=`<span style="margin-left:8px;color:var(--text3)">Venc:</span><span class="tl-diff-from">${fmtDate(e.prevData)}</span><span class="tl-diff-arrow">→</span><span class="tl-diff-to">${fmtDate(e.newData)}</span>`;
+    diffHtml+=`<span style="margin-left:8px;color:var(--text3);font-size:11px">Venc:</span> <span class="tl-diff-from">${fmtDate(e.prevData)}</span><span class="tl-diff-arrow">→</span><span class="tl-diff-to">${fmtDate(e.newData)}</span>`;
+  if((e.prevJust||'')!==(e.newJust||''))
+    diffHtml+=`<div style="margin-top:5px;width:100%"><span style="color:var(--text3);font-size:11px">Justificativa:</span> <span class="tl-diff-from">${esc(e.prevJust||'—')}</span> <span class="tl-diff-arrow">→</span> <span class="tl-diff-to">${esc(e.newJust||'—')}</span></div>`;
+
+  // Show current justificativa if set and no diff (unchanged)
+  const justLabel = (e.newJust&&e.prevJust===e.newJust)
+    ? `<div style="margin-top:4px;font-size:11px;color:var(--text2)">📝 Justificativa: <em>${esc(e.newJust)}</em></div>` : '';
 
   return `<div class="tl-entry">
     <div class="tl-dot ${dotCls}"></div>
@@ -1195,6 +1201,7 @@ function renderTlEntry(e){
       </div>
       <div style="font-size:12px;color:var(--text)"><strong>${esc(e.docNome||'')}</strong></div>
       ${diffHtml?`<div class="tl-diff">${diffHtml}</div>`:''}
+      ${justLabel}
       ${e.obs?`<div class="tl-obs">${esc(e.obs)}</div>`:''}
     </div>
   </div>`;
