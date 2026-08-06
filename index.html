@@ -647,6 +647,8 @@ const CONFIG = {
   JSONBIN_API_KEY: '$2a$10$NhmXfS0QZiXUxosdImwfGuw6SSpu/ofmat/2kSNj9YKW8I4beCIpq',
   JSONBIN_BASE: 'https://api.jsonbin.io/v3/b/'
 };
+// Filiais excluídas de todos os relatórios e da tabela principal: MIN(15) ADM(18) CBA(20) UNA(26) VNP(33) GUA(39)
+const FILIAIS_EXCLUIDAS = new Set([15, 18, 20, 26, 33, 39]);
 
 /* ─── UTILS ───────────────────────────────────────────────────────────── */
 function norm(s){
@@ -822,7 +824,7 @@ function getFiltered(){
   const fAuditor=document.getElementById('filterAuditor')?.value||'';
   const fTipo=document.getElementById('filterTipo')?.value||'';
   const fObrig=document.getElementById('filterObrig')?.value||'';
-  let list=activeDados.registros.map(deriveRegistro);
+  let list=activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(deriveRegistro);
   if(state.kpiFilter) list=list.filter(r=>r.urgencia===state.kpiFilter);
   if(fFilial)   list=list.filter(r=>r.filialId==fFilial);
   if(fRegional) list=list.filter(r=>norm(r.branch.regional)===norm(fRegional));
@@ -984,7 +986,7 @@ function renderTable(list){
 
 /* ─── RENDER ALL ────────────────────────────────────────────────────────*/
 function renderAll(){
-  const allList=activeDados.registros.map(deriveRegistro);
+  const allList=activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(deriveRegistro);
   const filtered=getFiltered();
   renderRegionalSummary(allList);
   renderKpis(allList);
@@ -1002,10 +1004,10 @@ function updateHeaderSub(list){
 
 /* ─── FILTER POPULATION ─────────────────────────────────────────────────*/
 function populateFilters(){
-  const filiais=[...new Set(activeDados.filiais.map(b=>b))].sort((a,b)=>a.sigla.localeCompare(b.sigla,'pt-BR'));
-  const regionais=[...new Set(activeDados.filiais.map(b=>b.regional||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const auditores=[...new Set(activeDados.filiais.map(b=>b.auditor||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const tipos=[...new Set(activeDados.registros.map(r=>r.docKey))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const filiais=[...new Set(activeDados.filiais.filter(b=>!FILIAIS_EXCLUIDAS.has(b.id)).map(b=>b))].sort((a,b)=>a.sigla.localeCompare(b.sigla,'pt-BR'));
+  const regionais=[...new Set(activeDados.filiais.filter(b=>!FILIAIS_EXCLUIDAS.has(b.id)).map(b=>b.regional||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const auditores=[...new Set(activeDados.filiais.filter(b=>!FILIAIS_EXCLUIDAS.has(b.id)).map(b=>b.auditor||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const tipos=[...new Set(activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(r=>r.docKey))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
   function fillSel(id, opts, labelFn, valFn){
     const el=document.getElementById(id); if(!el) return;
@@ -1256,10 +1258,10 @@ function renderReports(){
 
 function renderAuditorDashboard(){
   const el=document.getElementById('auditorDashboard'); if(!el) return;
-  const auditores=[...new Set(activeDados.filiais.map(b=>b.auditor||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const auditores=[...new Set(activeDados.filiais.filter(b=>!FILIAIS_EXCLUIDAS.has(b.id)).map(b=>b.auditor||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   if(!auditores.length){el.innerHTML='<p style="color:var(--text3)">Nenhum auditor encontrado.</p>';return;}
 
-  const allRegs=activeDados.registros.map(deriveRegistro);
+  const allRegs=activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(deriveRegistro);
   const rows=auditores.map(aud=>{
     const regs=allRegs.filter(r=>r.branch.auditor===aud);
     const total=regs.length;
@@ -1305,7 +1307,7 @@ function openAudDetail(auditor){
   currentAudDetailName=auditor;
   document.getElementById('audDetailTitle').textContent=`👤 ${auditor}`;
   const body=document.getElementById('audDetailBody');
-  const allRegs=activeDados.registros.map(deriveRegistro).filter(r=>r.branch.auditor===auditor);
+  const allRegs=activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(deriveRegistro).filter(r=>r.branch.auditor===auditor);
   const entries=auditLog.filter(e=>branchesById[e.filialId]?.auditor===auditor);
 
   // Summary stats
@@ -1353,7 +1355,7 @@ function closeAudDetail(){
 }
 function exportAuditorCsv(){
   if(!currentAudDetailName) return;
-  const regs=activeDados.registros.map(deriveRegistro).filter(r=>r.branch.auditor===currentAudDetailName);
+  const regs=activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(deriveRegistro).filter(r=>r.branch.auditor===currentAudDetailName);
   const rows=[['Filial','Regional','Documento','Status','Vencimento','Dias','Obrigatório','Justificativa','Atualizado Por','Atualizado Em']];
   regs.forEach(r=>rows.push([r.branch.sigla,r.branch.regional||'',r.docNome,r.status,r.dataVencimento||'',r.diasParaVencer??'',r.obrigatorio?'Sim':'Não',r.justificativa||'',r.updatedBy||'',r.updatedAt?fmtDateTime(r.updatedAt):'']));
   downloadCsv(`auditor_${currentAudDetailName}.csv`,rows);
@@ -1657,7 +1659,7 @@ function exportCsvAll(){
 function exportCsvReport(){
   const auditor=document.getElementById('rptAuditorSel')?.value||'';
   const filial=document.getElementById('rptFilialSel')?.value||'';
-  let list=activeDados.registros.map(deriveRegistro);
+  let list=activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(deriveRegistro);
   if(auditor) list=list.filter(r=>r.branch.auditor===auditor);
   if(filial)  list=list.filter(r=>r.filialId==filial);
   const rows=[['Filial','Sigla','Regional','Auditor','Documento','Status','Urgência','Vencimento','Dias','Obrigatório','Justificativa','Atualizado Por','Atualizado Em']];
@@ -1707,10 +1709,23 @@ async function loadOverrides(){
     const res=await fetch(CONFIG.JSONBIN_BASE+binId+'/latest',{headers:{'X-Master-Key':CONFIG.JSONBIN_API_KEY,'X-Bin-Meta':'false'}});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
-    overrides=data.overrides||{};
-    auditLog=data.auditLog||[];
+    // Merge JSONBin data with localStorage — take the most-recently-updated override per entry
+    const lsOv=safeStorage.get('painelLic_overrides',{});
+    const lsAL=safeStorage.get('painelLic_auditLog',[]);
+    const merged={...(data.overrides||{})};
+    Object.entries(lsOv).forEach(([k,v])=>{
+      if(!merged[k]||(v.updatedAt||'')>(merged[k].updatedAt||'')) merged[k]=v;
+    });
+    overrides=merged;
+    // Merge audit logs — deduplicate by ts+regId+action
+    const seenTs=new Set();
+    const allLogs=[...(data.auditLog||[]),...lsAL];
+    auditLog=allLogs.filter(e=>{const k=(e.ts||'')+'-'+(e.regId||'')+'-'+(e.action||'');if(seenTs.has(k))return false;seenTs.add(k);return true;});
     if(data.activeDados&&data.activeDados.registros) activeDados=data.activeDados;
     setSyncState('synced');
+    // Push back immediately if local had newer entries not yet in JSONBin
+    const cloudOvCount=Object.keys(data.overrides||{}).length;
+    if(Object.keys(merged).length>cloudOvCount||auditLog.length>(data.auditLog||[]).length) queueSync();
   } catch(e){
     overrides=safeStorage.get('painelLic_overrides',{});
     auditLog=safeStorage.get('painelLic_auditLog',[]);
@@ -1728,12 +1743,36 @@ async function pushOverrides(){
   const binId=CONFIG.JSONBIN_BIN_ID;
   if(!binId) return;
   setSyncState('syncing');
+  const payload={overrides,auditLog,activeDados};
   try{
     const res=await fetch(CONFIG.JSONBIN_BASE+binId,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':CONFIG.JSONBIN_API_KEY,'X-Bin-Versioning':'false'},
-      body:JSON.stringify({overrides, auditLog, activeDados}),
+      body:JSON.stringify(payload),
     });
+    if(res.status===403 && CONFIG.JSONBIN_API_KEY){
+      // Bin not owned by this account — auto-create a new one and retry
+      try{
+        const cr=await fetch('https://api.jsonbin.io/v3/b',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','X-Master-Key':CONFIG.JSONBIN_API_KEY,'X-Bin-Name':'painel-alvaras','X-Bin-Private':'false'},
+          body:JSON.stringify(payload),
+        });
+        if(cr.ok){
+          const cd=await cr.json();
+          const newId=cd.metadata?.id||cd.record?.metadata?.id;
+          if(newId){
+            CONFIG.JSONBIN_BIN_ID=newId;
+            safeStorage.set('painelLic_autobin',newId);
+            safeStorage.set('painelLic_binId',newId);
+            setSyncState('synced');
+            toast('Sincronização: novo bin criado. Salve o ID: '+newId,'success');
+            return;
+          }
+        }
+      }catch(_){}
+      throw new Error('HTTP 403 — bin não acessível, falha ao criar substituto');
+    }
     if(!res.ok) throw new Error('HTTP '+res.status);
     setSyncState('synced');
   } catch(e){
@@ -1777,12 +1816,14 @@ function toast(msg,type=''){
 
 /* ─── INIT ──────────────────────────────────────────────────────────────────*/
 async function init(){
-  // localStorage only fills in when the hardcoded CONFIG value is empty
+  // Auto-created bins are stored under 'painelLic_autobin' and always take priority
+  // (they are owned by this account, so PUT succeeds)
+  const _autobin=safeStorage.get('painelLic_autobin','');
   const _sb=safeStorage.get('painelLic_binId','');
   const _sk=safeStorage.get('painelLic_apiKey','');
-  if(!CONFIG.JSONBIN_BIN_ID && _sb) CONFIG.JSONBIN_BIN_ID=_sb;
+  if(_autobin) CONFIG.JSONBIN_BIN_ID=_autobin;
+  else if(!CONFIG.JSONBIN_BIN_ID && _sb) CONFIG.JSONBIN_BIN_ID=_sb;
   if(!CONFIG.JSONBIN_API_KEY && _sk) CONFIG.JSONBIN_API_KEY=_sk;
-  // Sync localStorage to match current hardcoded values so config panel shows them
   if(CONFIG.JSONBIN_BIN_ID) safeStorage.set('painelLic_binId', CONFIG.JSONBIN_BIN_ID);
   if(CONFIG.JSONBIN_API_KEY) safeStorage.set('painelLic_apiKey', CONFIG.JSONBIN_API_KEY);
   initCfgTrigger();
