@@ -1749,7 +1749,8 @@ async function pushOverrides(){
   const binId=CONFIG.JSONBIN_BIN_ID;
   if(!binId) return;
   setSyncState('syncing');
-  const payload={overrides,auditLog,activeDados};
+  // Sync only user-entered data — activeDados (~280KB) is too large for JSONBin free tier
+  const payload={overrides,auditLog};
   try{
     const res=await fetch(CONFIG.JSONBIN_BASE+binId,{
       method:'PUT',
@@ -1757,11 +1758,11 @@ async function pushOverrides(){
       body:JSON.stringify(payload),
     });
     if(res.status===403 && CONFIG.JSONBIN_API_KEY){
-      // Bin not owned by this account — auto-create a new one and retry
+      // Bin owned by a different account — auto-create one owned by this key
       try{
         const cr=await fetch('https://api.jsonbin.io/v3/b',{
           method:'POST',
-          headers:{'Content-Type':'application/json','X-Master-Key':CONFIG.JSONBIN_API_KEY,'X-Bin-Name':'painel-alvaras','X-Bin-Private':'false'},
+          headers:{'Content-Type':'application/json','X-Master-Key':CONFIG.JSONBIN_API_KEY,'X-Bin-Name':'painel-alvaras'},
           body:JSON.stringify(payload),
         });
         if(cr.ok){
@@ -1772,18 +1773,20 @@ async function pushOverrides(){
             safeStorage.set('painelLic_autobin',newId);
             safeStorage.set('painelLic_binId',newId);
             setSyncState('synced');
-            toast('Sincronização: novo bin criado. Salve o ID: '+newId,'success');
+            toast('Sincronização ativa — bin configurado automaticamente','success');
             return;
           }
+        } else {
+          console.warn('pushOverrides: create bin HTTP',cr.status);
         }
-      }catch(_){}
-      throw new Error('HTTP 403 — bin não acessível, falha ao criar substituto');
+      }catch(ce){ console.warn('pushOverrides: create exception',ce); }
+      throw new Error('HTTP 403');
     }
     if(!res.ok) throw new Error('HTTP '+res.status);
     setSyncState('synced');
   } catch(e){
     setSyncState('error');
-    console.warn('pushOverrides failed',e);
+    console.warn('pushOverrides failed',e.message);
   }
 }
 
