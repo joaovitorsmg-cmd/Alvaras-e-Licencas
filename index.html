@@ -505,6 +505,14 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
     </div>
     <div id="importStatus" style="margin-top:12px"></div>
   </div>
+  <div class="section-card" id="removeImportCard" style="display:none">
+    <h3 style="color:var(--red)">⚠ Planilha importada ativa</h3>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:12px">
+      Os dados atuais do painel vieram de uma importação de planilha.<br>
+      Remover a planilha volta ao estado base (sem registros importados) e mantém os comentários e ajustes já registrados.
+    </p>
+    <button class="btn" style="background:var(--red);color:#fff" onclick="removerPlanilha()">🗑 Remover planilha importada</button>
+  </div>
   <div class="section-card" id="importHistCard" style="display:none">
     <h3>📋 Histórico de Importações</h3>
     <div id="importHistList"></div>
@@ -628,10 +636,11 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
       </div>
       <div id="cfgTestResult" style="margin-top:10px;font-size:13px;min-height:20px"></div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-secondary" onclick="closeCfgModal()">Cancelar</button>
       <button class="btn btn-secondary" onclick="testCfgConn()">🔗 Testar Conexão</button>
       <button class="btn btn-primary" onclick="saveCfg()">💾 Salvar</button>
+      <button class="btn" style="background:var(--red);color:#fff;margin-left:auto" onclick="zerarPainel()">🗑 Zerar Painel</button>
     </div>
   </div>
 </div>
@@ -761,7 +770,7 @@ function computeUrgencia(status, dataVenc){
 function deriveRegistro(r){
   const ov=overrides[String(r.id)]||{};
   const status   = ov.status    != null ? ov.status    : (r.status||'Sem Protocolo');
-  const dataVenc = ov.dataVencimento !== undefined ? ov.dataVencimento : r.dataVencimento;
+  const dataVenc = ov.dataVencimento != null ? ov.dataVencimento : r.dataVencimento;
   const justif   = ov.justificativa != null ? ov.justificativa : (r.justificativa||'');
   const branch   = branchesById[r.filialId]||{sigla:'?',nome:'?',regional:'',auditor:''};
   const cat      = catalogByKey[r.docKey]||{};
@@ -1113,7 +1122,7 @@ function closeEditModal(){
 
 function saveEdit(){
   const regId=editingRegId; if(!regId) return;
-  const dataVencimento=document.getElementById('popData').value||null;
+  const dateInput=document.getElementById('popData').value;
   const justificativa=document.getElementById('popJust').value||'';
   const obs=document.getElementById('popObs').value.trim();
   const nome=document.getElementById('popNome').value.trim();
@@ -1122,8 +1131,11 @@ function saveEdit(){
   const base=activeDados.registros.find(r=>String(r.id)===String(regId));
   const prev=overrides[String(regId)]||{};
   const prevJust=prev.justificativa!=null?prev.justificativa:(base.justificativa||'');
-  const prevData=prev.dataVencimento!==undefined?prev.dataVencimento:base.dataVencimento;
+  const prevData=prev.dataVencimento!=null?prev.dataVencimento:base.dataVencimento;
   const currentStatus=prev.status!=null?prev.status:(base.status||'Sem Protocolo');
+
+  // Only store a date override when user entered a value; otherwise keep the previous override (or let base win)
+  const dataVencimento=dateInput||prevData||null;
 
   overrides[String(regId)]={...prev, dataVencimento, justificativa, updatedBy:nome||null, updatedAt:new Date().toISOString()};
 
@@ -1640,9 +1652,42 @@ function renderImportHist(){
   const list=document.getElementById('importHistList');
   if(!card||!list) return;
   const imports=auditLog.filter(e=>e.action==='import'&&e.docNome==='Importação de planilha').reverse();
-  if(!imports.length){card.style.display='none';return;}
-  card.style.display='block';
-  list.innerHTML='<div class="timeline">'+imports.slice(0,20).map(e=>renderTlEntry(e)).join('')+'</div>';
+  if(!imports.length){card.style.display='none';} else {
+    card.style.display='block';
+    list.innerHTML='<div class="timeline">'+imports.slice(0,20).map(e=>renderTlEntry(e)).join('')+'</div>';
+  }
+  const removeCard=document.getElementById('removeImportCard');
+  if(removeCard) removeCard.style.display=activeDados._xlsImport?'block':'none';
+}
+
+async function removerPlanilha(){
+  if(!confirm('Remover a planilha importada? Os registros voltarão ao estado base. Comentários e ajustes serão mantidos.')) return;
+  activeDados={...deepClone(DADOS), geradoEm:new Date().toISOString()};
+  rebuildIndices();
+  populateFilters();
+  renderAll();
+  renderImportHist();
+  safeStorage.set('painelLic_activeDados', activeDados);
+  queueSync();
+  toast('Planilha removida — dados base restaurados','success');
+}
+
+async function zerarPainel(){
+  if(!confirm('ZERAR O PAINEL?\n\nIsso apagará:\n• Todos os overrides (datas, justificativas)\n• Todo o histórico de auditoria\n• A planilha importada\n\nEsta ação não pode ser desfeita.')) return;
+  if(!confirm('Confirmar: zerar TUDO — overrides, histórico e planilha?')) return;
+  overrides={};
+  auditLog=[];
+  activeDados={...deepClone(DADOS), geradoEm:new Date().toISOString()};
+  ['painelLic_overrides','painelLic_auditLog','painelLic_activeDados','painelLic_autobin','painelLic_binId'].forEach(k=>safeStorage.del(k));
+  safeStorage.set('painelLic_overrides',{});
+  safeStorage.set('painelLic_auditLog',[]);
+  safeStorage.set('painelLic_activeDados',activeDados);
+  rebuildIndices();
+  populateFilters();
+  renderAll();
+  closeCfgModal();
+  queueSync();
+  toast('Painel zerado — todos os dados foram apagados','success');
 }
 
 /* ─── CSV EXPORT ──────────────────────────────────────────────────────────*/
