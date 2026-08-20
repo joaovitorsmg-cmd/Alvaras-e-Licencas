@@ -377,11 +377,29 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
 
 <!-- ══ TAB: VISÃO GERAL ══════════════════════════════════════════════ -->
 <div id="tab-geral" class="tab-panel active">
+  <!-- EMPTY STATE — shown when no spreadsheet has been loaded -->
+  <div id="emptyStatePanel" style="display:none;padding:60px 16px;text-align:center">
+    <div style="font-size:56px;margin-bottom:12px">📋</div>
+    <h2 style="font-size:20px;margin-bottom:8px">Nenhuma planilha carregada</h2>
+    <p style="color:var(--text2);font-size:14px;margin-bottom:28px">Carregue a planilha XLS para iniciar o painel de Alvarás &amp; Licenças</p>
+    <div style="border:2px dashed var(--border);border-radius:var(--radius-lg);padding:40px;max-width:480px;margin:0 auto;cursor:pointer;transition:var(--transition)"
+         ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+         ondragleave="this.style.borderColor='var(--border)'"
+         ondrop="handleDrop(event)">
+      <div style="font-size:40px;margin-bottom:10px;opacity:.5">⬆</div>
+      <p style="color:var(--text2);font-size:14px;margin-bottom:14px">Arraste o arquivo aqui ou</p>
+      <label class="btn btn-primary" style="cursor:pointer;display:inline-block">
+        Selecionar arquivo
+        <input type="file" accept=".xlsx,.xls,.json" onchange="handleFileSelect(event)" style="display:none"/>
+      </label>
+      <p style="font-size:11px;color:var(--text3);margin-top:12px">Formatos aceitos: .xlsx · .xls · .json</p>
+    </div>
+  </div>
   <!-- KPI BAR -->
   <div id="regionalBar"></div>
   <div class="kpi-bar" id="kpiBar"></div>
   <!-- FILTER BAR -->
-  <div class="filter-bar">
+  <div class="filter-bar" id="mainFilterBar">
     <div class="regiao-pills">
       <button class="pill all active" id="pillAll" onclick="setRegiao(null)">🌐 Todas</button>
       <button class="pill norte" id="pillNorte" onclick="setRegiao('NORTE')">🟡 Norte</button>
@@ -407,7 +425,7 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
     <button class="btn btn-secondary btn-sm" onclick="exportCsvAll()">⬇ CSV Geral</button>
   </div>
   <!-- TABLE -->
-  <div class="table-wrap">
+  <div class="table-wrap" id="mainTableWrap">
     <table id="mainTable">
       <thead>
         <tr>
@@ -706,7 +724,7 @@ const KPI_LIST=[
 const STATUS_OPTIONS=['Aprovado','Aberto/Pendente','Aguardando Aprovação','Vencido','Rejeitado','Sem Protocolo'];
 
 /* ─── STATE ────────────────────────────────────────────────────────────*/
-var activeDados = DADOS;
+var activeDados = {filiais:[],registros:[],catalogo:DADOS.catalogo,geradoEm:'',_empty:true};
 var overrides = {};
 var auditLog = [];
 var pendingImport = null;
@@ -1001,6 +1019,16 @@ function renderTable(list){
 
 /* ─── RENDER ALL ────────────────────────────────────────────────────────*/
 function renderAll(){
+  const isEmpty=!!(activeDados._empty)||activeDados.registros.length===0;
+  const emptyEl=document.getElementById('emptyStatePanel');
+  const filterEl=document.getElementById('mainFilterBar');
+  const tableEl=document.getElementById('mainTableWrap');
+  const footerEl=document.getElementById('tableFooter');
+  const regionalEl=document.getElementById('regionalBar');
+  const kpiEl=document.getElementById('kpiBar');
+  if(emptyEl) emptyEl.style.display=isEmpty?'block':'none';
+  [filterEl,tableEl,footerEl,regionalEl,kpiEl].forEach(el=>{if(el) el.style.display=isEmpty?'none':'';});
+  if(isEmpty){updateHeaderSub([]);return;}
   const allList=activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(deriveRegistro);
   const filtered=getFiltered();
   renderRegionalSummary(allList);
@@ -1012,6 +1040,7 @@ function renderAll(){
 function updateHeaderSub(list){
   const el=document.getElementById('headerSub');
   if(!el) return;
+  if(activeDados._empty||!list.length){el.textContent='Carregue uma planilha para iniciar';return;}
   const vencidos=list.filter(r=>r.urgencia==='vencido').length;
   const criticos=list.filter(r=>r.urgencia==='critico').length;
   el.textContent=`${list.length} registros · ${vencidos} vencidos · ${criticos} críticos`;
@@ -1661,15 +1690,15 @@ function renderImportHist(){
 }
 
 async function removerPlanilha(){
-  if(!confirm('Remover a planilha importada? Os registros voltarão ao estado base. Comentários e ajustes serão mantidos.')) return;
-  activeDados={...deepClone(DADOS), geradoEm:new Date().toISOString()};
+  if(!confirm('Remover a planilha importada? O painel ficará vazio. Comentários e ajustes serão mantidos.')) return;
+  activeDados={filiais:[],registros:[],catalogo:DADOS.catalogo,geradoEm:new Date().toISOString(),_empty:true};
   rebuildIndices();
   populateFilters();
   renderAll();
   renderImportHist();
   safeStorage.set('painelLic_activeDados', activeDados);
   queueSync();
-  toast('Planilha removida — dados base restaurados','success');
+  toast('Planilha removida — carregue uma nova planilha para usar o painel','success');
 }
 
 async function zerarPainel(){
@@ -1677,7 +1706,7 @@ async function zerarPainel(){
   if(!confirm('Confirmar: zerar TUDO — overrides, histórico e planilha?')) return;
   overrides={};
   auditLog=[];
-  activeDados={...deepClone(DADOS), geradoEm:new Date().toISOString()};
+  activeDados={filiais:[],registros:[],catalogo:DADOS.catalogo,geradoEm:new Date().toISOString(),_empty:true};
   ['painelLic_overrides','painelLic_auditLog','painelLic_activeDados','painelLic_autobin','painelLic_binId'].forEach(k=>safeStorage.del(k));
   safeStorage.set('painelLic_overrides',{});
   safeStorage.set('painelLic_auditLog',[]);
