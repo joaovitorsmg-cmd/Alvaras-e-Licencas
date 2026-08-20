@@ -43,10 +43,27 @@ function section(label) {
   await page.goto(FILE_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
 
-  // Wait for table to be populated
+  // Seed minimal test data — the panel now starts empty (requires XLS upload),
+  // so we inject two synthetic registros directly for the test battery to work.
+  await page.evaluate(() => {
+    if (activeDados._empty || activeDados.registros.length === 0) {
+      activeDados = {
+        ...activeDados,
+        _empty: false,
+        filiais: [{ id: 1, sigla: 'TST', nome: 'Teste', estado: 'GO', regional: 'R1', auditor: 'Tester', supervisor: '', coordenador: '', regiao: 'SUL', email_supervisor: '' }],
+        registros: [
+          { id: 1, filialId: 1, docKey: 'alvara_funcionamento', docNome: 'Alvará de Funcionamento', status: 'Sem Protocolo', dataVencimento: null, justificativa: '', obrigatorio: true },
+          { id: 2, filialId: 1, docKey: 'alvara_funcionamento', docNome: 'Alvará de Funcionamento 2', status: 'Sem Protocolo', dataVencimento: null, justificativa: '', obrigatorio: false },
+        ],
+      };
+      rebuildIndices();
+    }
+  });
+
+  // Wait for table to be populated (or confirm seeded data is ready)
   await page.waitForFunction(() => {
     const tb = document.getElementById('mainTbody');
-    return tb && tb.querySelectorAll('tr').length > 0;
+    return (tb && tb.querySelectorAll('tr').length > 0) || (activeDados && activeDados.registros.length > 0);
   }, { timeout: 10000 }).catch(() => {});
 
   // ─────────────────────────────────────────────────────────────────
