@@ -394,6 +394,7 @@ html[data-theme="dark"] .obrig-badge{background:#3A1E00;color:#FFB74D;border-col
       </label>
       <p style="font-size:11px;color:var(--text3);margin-top:12px">Formatos aceitos: .xlsx · .xls · .json</p>
     </div>
+    <div id="emptyImportStatus" style="margin-top:14px;min-height:20px"></div>
   </div>
   <!-- KPI BAR -->
   <div id="regionalBar"></div>
@@ -1019,7 +1020,7 @@ function renderTable(list){
 
 /* ─── RENDER ALL ────────────────────────────────────────────────────────*/
 function renderAll(){
-  const isEmpty=!!(activeDados._empty)||activeDados.registros.length===0;
+  const isEmpty=!activeDados.registros||activeDados.registros.length===0;
   const emptyEl=document.getElementById('emptyStatePanel');
   const filterEl=document.getElementById('mainFilterBar');
   const tableEl=document.getElementById('mainTableWrap');
@@ -1028,7 +1029,11 @@ function renderAll(){
   const kpiEl=document.getElementById('kpiBar');
   if(emptyEl) emptyEl.style.display=isEmpty?'block':'none';
   [filterEl,tableEl,footerEl,regionalEl,kpiEl].forEach(el=>{if(el) el.style.display=isEmpty?'none':'';});
-  if(isEmpty){updateHeaderSub([]);return;}
+  if(isEmpty){
+    const tb=document.getElementById('mainTbody');if(tb) tb.innerHTML='';
+    const tf=document.getElementById('tableFooter');if(tf) tf.textContent='';
+    updateHeaderSub([]);return;
+  }
   const allList=activeDados.registros.filter(r=>!FILIAIS_EXCLUIDAS.has(r.filialId)).map(deriveRegistro);
   const filtered=getFiltered();
   renderRegionalSummary(allList);
@@ -1040,7 +1045,7 @@ function renderAll(){
 function updateHeaderSub(list){
   const el=document.getElementById('headerSub');
   if(!el) return;
-  if(activeDados._empty||!list.length){el.textContent='Carregue uma planilha para iniciar';return;}
+  if(!activeDados.registros||!activeDados.registros.length){el.textContent='Carregue uma planilha para iniciar';return;}
   const vencidos=list.filter(r=>r.urgencia==='vencido').length;
   const criticos=list.filter(r=>r.urgencia==='critico').length;
   el.textContent=`${list.length} registros · ${vencidos} vencidos · ${criticos} críticos`;
@@ -1525,14 +1530,19 @@ function parseXlsToData(wb){
   });
   if(updated===0&&added===0) throw new Error('Nenhum registro correspondido. Verifique as colunas: '+rows[0].filter(Boolean).join(', '));
   const addedFilials=updatedFiliais.length-activeDados.filiais.length;
-  return {...activeDados,geradoEm:new Date().toISOString().split('T')[0],registros:updatedReg,filiais:updatedFiliais,_xlsImport:{updated,added,addedFilials}};
+  return {...activeDados,_empty:false,geradoEm:new Date().toISOString().split('T')[0],registros:updatedReg,filiais:updatedFiliais,_xlsImport:{updated,added,addedFilials}};
+}
+function setImportStatus(html){
+  const a=document.getElementById('importStatus');
+  const b=document.getElementById('emptyImportStatus');
+  if(a) a.innerHTML=html;
+  if(b) b.innerHTML=html;
 }
 function processImportFile(file){
   const isXls=/\.xlsx?$/i.test(file.name);
   const isJson=file.name.endsWith('.json');
   if(!isXls&&!isJson){toast('Formatos aceitos: .xlsx, .xls, .json','error');return;}
-  const statusEl=document.getElementById('importStatus');
-  statusEl.innerHTML='<div style="display:flex;align-items:center;gap:8px;color:var(--text2)"><div class="spinner"></div> Lendo arquivo…</div>';
+  setImportStatus('<div style="display:flex;align-items:center;gap:8px;color:var(--text2)"><div class="spinner"></div> Lendo arquivo…</div>');
   const reader=new FileReader();
   if(isXls){
     reader.onload=e=>{
@@ -1541,10 +1551,10 @@ function processImportFile(file){
         const wb=XLSX.read(e.target.result,{type:'array',cellDates:false});
         const data=parseXlsToData(wb);
         pendingImport=data;
-        statusEl.innerHTML=`<div style="color:var(--green);font-size:12px;padding:6px 10px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius)">✅ Planilha lida: <strong>${data._xlsImport.updated}</strong> registros atualizados${data._xlsImport.added?`, ${data._xlsImport.added} novos`:''}${data._xlsImport.addedFilials?` · <strong>${data._xlsImport.addedFilials}</strong> filial(is) nova(s) detectada(s)`:''}</div>`;
+        setImportStatus(`<div style="color:var(--green);font-size:12px;padding:6px 10px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--radius)">✅ Planilha lida: <strong>${data._xlsImport.updated}</strong> registros atualizados${data._xlsImport.added?`, ${data._xlsImport.added} novos`:''}${data._xlsImport.addedFilials?` · <strong>${data._xlsImport.addedFilials}</strong> filial(is) nova(s) detectada(s)`:''}</div>`);
         showImportDiff(data);
       }catch(err){
-        statusEl.innerHTML=`<div style="color:var(--red);padding:10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius)">${esc(err.message)}</div>`;
+        setImportStatus(`<div style="color:var(--red);padding:10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius)">${esc(err.message)}</div>`);
         toast('Erro ao ler planilha: '+err.message,'error');
       }
     };
@@ -1554,10 +1564,10 @@ function processImportFile(file){
       try{
         const data=JSON.parse(e.target.result);
         if(!data.registros||!data.filiais){throw new Error('Formato inválido: faltam campos registros ou filiais');}
-        pendingImport=data;statusEl.innerHTML='';
+        pendingImport=data;setImportStatus('');
         showImportDiff(data);
       }catch(err){
-        statusEl.innerHTML=`<div style="color:var(--red);padding:10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius)">${esc(err.message)}</div>`;
+        setImportStatus(`<div style="color:var(--red);padding:10px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius)">${esc(err.message)}</div>`);
         toast('Erro ao ler arquivo: '+err.message,'error');
       }
     };
@@ -1666,13 +1676,17 @@ function confirmImport(){
     obs:`Planilha importada. Gerada em ${activeDados.geradoEm||'N/D'}. ${activeDados.registros.length} registros, ${activeDados.filiais.length} filiais.`,
   });
 
+  // Ensure _empty flag is cleared regardless of spread origin
+  delete activeDados._empty;
   // Save new data to local storage
   safeStorage.set('painelLic_activeDados', activeDados);
   pendingImport=null;
   document.getElementById('importDiffOverlay').classList.remove('open');
+  // Switch to Visão Geral so the user sees the populated table right away
+  switchTab('geral', document.querySelector('[data-tab="geral"]'));
   renderAll();
   queueSync();
-  toast('Planilha importada com sucesso!','success');
+  toast(`Planilha importada — ${activeDados.registros.length} registros, ${activeDados.filiais.length} filiais`,'success');
   renderImportHist();
 }
 
