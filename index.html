@@ -1817,7 +1817,9 @@ async function loadOverrides(){
     const seenTs=new Set();
     const allLogs=[...(data.auditLog||[]),...lsAL];
     auditLog=allLogs.filter(e=>{const k=(e.ts||'')+'-'+(e.regId||'')+'-'+(e.action||'');if(seenTs.has(k))return false;seenTs.add(k);return true;});
+    // activeDados is too large for JSONBin free tier — always restore from localStorage
     if(data.activeDados&&data.activeDados.registros) activeDados=data.activeDados;
+    else{const sd=safeStorage.get('painelLic_activeDados',null);if(sd&&sd.registros&&sd.registros.length>0) activeDados=sd;}
     setSyncState('synced');
     // Push back immediately if local had newer entries not yet in JSONBin
     const cloudOvCount=Object.keys(data.overrides||{}).length;
